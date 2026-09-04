@@ -1,0 +1,20 @@
+{
+ "name": "Шкаф и образы",
+ "short_name": "Шкаф",
+ "start_url": ".",
+ "display": "standalone",
+ "background_color": "#E7E9E5",
+ "theme_color": "#33586B",
+ "icons": [
+  {
+   "src": "icon-180.png",
+   "sizes": "180x180",
+   "type": "image/png"
+  },
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  }
+ ]
+}
