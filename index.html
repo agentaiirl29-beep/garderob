@@ -259,16 +259,9 @@ var TEMP=[
 var label=function(list,k){for(var i=0;i<list.length;i++) if(list[i][0]===k) return list[i][1];return k;};
 
 /* раскладка коллажа: как в каталогах, вещи лежат по месту на фигуре */
-var POS={
- with:{outer:{l:0,t:4,w:46,h:46,z:2,a:"center top"},
-       top:{l:27,t:8,w:46,h:40,z:3,a:"center top"},
-       bottom:{l:30,t:38,w:40,h:50,z:1,a:"center top"},
-       shoes:{l:58,t:79,w:32,h:18,z:4,a:"center bottom"},
-       acc:{l:70,t:22,w:26,h:20,z:5,a:"center center"}},
- without:{top:{l:22,t:6,w:50,h:42,z:3,a:"center top"},
-       bottom:{l:25,t:40,w:46,h:50,z:1,a:"center top"},
-       shoes:{l:56,t:79,w:32,h:18,z:4,a:"center bottom"},
-       acc:{l:72,t:20,w:26,h:20,z:5,a:"center center"}}};
+var LAY={outer:{w:50,cx:25,z:2},top:{w:46,cx:50,z:3},bottom:{w:42,cx:47,z:1},
+         shoes:{w:34,cx:71,z:4},acc:{w:26,cx:81,z:5}};
+var AR={};   /* id -> ширина/высота картинки, считается один раз */
 
 /* ---------- цвет ---------- */
 function rgb2hsl(r,g,b){r/=255;g/=255;b/=255;
@@ -431,33 +424,64 @@ function chips(host,list,active,onPick){
     host.appendChild(b);});}
 
 /* ---------- холст ---------- */
+function measure(pieces){
+  return Promise.all(pieces.map(function(it){
+    if(AR[it.id]) return Promise.resolve();
+    return new Promise(function(res){
+      var im=new Image();
+      im.onload=function(){AR[it.id]=im.naturalWidth/(im.naturalHeight||1);res()};
+      im.onerror=function(){AR[it.id]=0.75;res()};
+      im.src=art(it);});}));}
+
+/* складывает вещи в фигуру: верх, под ним низ внахлёст, снизу обувь */
+function layout(pieces){
+  var by={};pieces.forEach(function(it){by[it.cat]=it});
+  var HH=400/3, ar=function(it){return AR[it.id]||0.75};
+  var h={},col=["top","bottom","shoes"];
+  col.forEach(function(c){if(by[c]) h[c]=LAY[c].w/ar(by[c]);});
+  var OV=7, OVS=5;
+  var total=(h.top||0)+(h.bottom||0)+(h.shoes||0)
+    -((h.top&&h.bottom)?OV:0)-((h.bottom&&h.shoes)?OVS:0);
+  var y0=5, avail=HH-y0-4, k=total>avail?avail/total:1;
+  var out=[],y=y0;
+  col.forEach(function(c){
+    if(!by[c]) return;
+    var w=LAY[c].w*k, hh=h[c]*k;
+    out.push({it:by[c],l:LAY[c].cx-w/2,t:y,w:w,h:hh,z:LAY[c].z});
+    y+=hh-(c==="top"?OV*k:(c==="bottom"?OVS*k:0));});
+  var topBox=out.filter(function(o){return o.it.cat==="top"})[0];
+  ["outer","acc"].forEach(function(c){
+    if(!by[c]) return;
+    var w=LAY[c].w*k, hh=w/ar(by[c]);
+    var t=topBox?(c==="outer"?topBox.t-1:topBox.t+topBox.h*0.35):y0;
+    if(t+hh>HH-2) t=Math.max(1,HH-2-hh);
+    out.push({it:by[c],l:LAY[c].cx-w/2,t:t,w:w,h:hh,z:LAY[c].z});});
+  return out;}
+
+function paint(host,pieces){
+  host.innerHTML="";
+  layout(pieces).forEach(function(b){
+    var im=document.createElement("img");
+    im.src=art(b.it);im.alt=b.it.name||label(CATS,b.it.cat);
+    im.style.left=b.l+"%";im.style.width=b.w+"%";
+    im.style.top=(b.t*0.75)+"%";im.style.height=(b.h*0.75)+"%";
+    im.style.objectFit="contain";im.style.zIndex=b.z;
+    host.appendChild(im);});}
+
 function drawCanvas(pieces){
-  var c=$("#canvas");c.innerHTML="";
+  var c=$("#canvas");
   if(!pieces||!pieces.length){
+    c.innerHTML="";
     var ph=document.createElement("div");ph.className="ph";
     ph.textContent = mode==="hand"
       ? "Выбери вещи в слотах ниже, и они соберутся в образ."
       : "Нажми «Собрать образ», и он появится здесь.";
     c.appendChild(ph);return;}
-  var map=POS[pieces.some(function(p){return p.cat==="outer"})?"with":"without"];
-  pieces.forEach(function(it){
-    var p=map[it.cat];if(!p) return;
-    var im=document.createElement("img");
-    im.src=art(it);im.alt=it.name||label(CATS,it.cat);
-    place(im,p);c.appendChild(im);});}
-
-function place(im,p){
-  im.style.left=p.l+"%";im.style.top=p.t+"%";
-  im.style.width=p.w+"%";im.style.height=p.h+"%";
-  im.style.objectFit="contain";im.style.objectPosition=p.a;im.style.zIndex=p.z;}
+  measure(pieces).then(function(){paint(c,pieces)});}
 
 function miniCanvas(pieces){
   var box=document.createElement("div");box.className="mini";
-  var map=POS[pieces.some(function(p){return p&&p.cat==="outer"})?"with":"without"];
-  pieces.forEach(function(it){
-    if(!it) return;var p=map[it.cat];if(!p) return;
-    var im=document.createElement("img");im.src=art(it);im.alt="";
-    place(im,p);box.appendChild(im);});
+  measure(pieces).then(function(){paint(box,pieces)});
   return box;}
 
 /* ---------- вкладка «Образ» ---------- */
@@ -740,6 +764,8 @@ $("#pick").addEventListener("change",function(e){
         return put("items",it);
       }).catch(function(){});});
   },Promise.resolve()).then(function(){
+    return added.length?dropDemo(true):null;
+  }).then(function(){
     renderAll();
     if(added.length===1) openItem(added[0]);
     else hint.textContent="Добавлено "+added.length+". Открой каждую и поставь метки: без них подбор работает вслепую.";});});
@@ -752,11 +778,14 @@ function guessCat(n){
   if(/bag|watch|сумк|часы|ремен|шапк|шарф/.test(n)) return "acc";
   return "top";}
 
-function dropDemo(){
+function dropDemo(quiet){
   var demo=items.filter(function(i){return i.demo});
+  if(!demo.length) return Promise.resolve();
   items=items.filter(function(i){return !i.demo});
-  hand={};current=null;
-  Promise.all(demo.map(function(i){return del("items",i.id)})).then(renderAll);}
+  Object.keys(hand).forEach(function(k){if(hand[k].demo) delete hand[k]});
+  current=null;
+  var p=Promise.all(demo.map(function(i){return del("items",i.id)}));
+  return quiet?p:p.then(renderAll);}
 
 /* ---------- навигация ---------- */
 function go(v){
